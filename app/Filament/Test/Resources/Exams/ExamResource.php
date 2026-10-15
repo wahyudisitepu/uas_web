@@ -38,50 +38,192 @@ class ExamResource extends Resource
     {
         return $table
             ->modifyQueryUsing(function (Builder $query) {
-                $now = now();
-                $query
-                    ->where('is_available', true)
-                    ->where(function (Builder $query) use ($now) {
-                        $query
-                            ->where(fn (Builder $query) => $query
-                                    ->where('exact_time', true)
-                                    ->where('started_at', '>=', $now)
-                                    ->whereRaw(
-                                        'DATE_ADD(started_at, INTERVAL duration MINUTE) >= ?',
-                                        [$now]
-                                    ))
-                            ->orWhere(fn (Builder $query) => $query
-                                    ->whereNotNull('expired_at')
-                                    ->where('expired_at', '>=', $now));
-                    });
+                $query->where('is_available', true);
             })
             ->recordTitleAttribute('title')
             ->columns([
                 TextColumn::make('title')
                     ->label('Ujian')
+                    ->weight('bold')
                     ->searchable(),
                 TextColumn::make('duration')
                     ->label('Durasi')
-                    ->numeric()
+                    ->formatStateUsing(fn ($state) => "{$state} Menit")
                     ->sortable(),
                 TextColumn::make('threshold')
-                    ->label('Min. Score')
+                    ->label('KKM')
                     ->numeric()
                     ->sortable(),
                 TextColumn::make('started_at')
-                    ->label('Mulai')
-                    ->dateTime('d F Y, H:i:s')
+                    ->label('Jadwal Mulai')
+                    ->dateTime('d M Y, H:i')
                     ->sortable(),
+                TextColumn::make('status')
+                    ->label('Status Pengerjaan')
+                    ->state(function (Exam $record) {
+                        $now = now();
+                        $result = \App\Models\ExamResult::where('exam_id', $record->id)
+                            ->where('user_id', auth()->id())
+                            ->latest()
+                            ->first();
+
+                        if ($result) {
+                            return $result->is_passed
+                                ? "Selesai (Nilai: {$result->grade} - LULUS)"
+                                : "Selesai (Nilai: {$result->grade} - TIDAK LULUS)";
+                        }
+
+                        $sessionFinished = session("exam_finished_{$record->id}_" . auth()->id(), false);
+                        if ($sessionFinished) {
+                            $res = session("exam_result_{$record->id}_" . auth()->id());
+                            $grade = $res['final_grade'] ?? 0;
+                            $passed = $res['is_passed'] ?? false;
+                            return $passed
+                                ? "Selesai (Nilai: {$grade} - LULUS)"
+                                : "Selesai (Nilai: {$grade} - TIDAK LULUS)";
+                        }
+
+                        // Cek apakah jadwal belum mulai
+                        if ($record->started_at && $record->started_at > $now) {
+                            return 'Akan Dimulai';
+                        }
+
+                        // Cek apakah waktu ujian sudah lewat/berakhir
+                        $isExpired = false;
+                        if ($record->exact_time && $record->started_at) {
+                            $endTime = \Carbon\Carbon::parse($record->started_at)->addMinutes((int) $record->duration);
+                            if ($now->greaterThan($endTime)) {
+                                $isExpired = true;
+                            }
+                        } elseif ($record->expired_at && $now->greaterThan($record->expired_at)) {
+                            $isExpired = true;
+                        }
+
+                        if ($isExpired) {
+                            return 'Waktu Berakhir';
+                        }
+
+                        return 'Siap Dikerjakan';
+                    })
+                    ->badge()
+                    ->color(function (string $state): string {
+                        if (str_contains($state, 'LULUS') && !str_contains($state, 'TIDAK')) {
+                            return 'success';
+                        }
+                        if (str_contains($state, 'TIDAK LULUS') || $state === 'Waktu Berakhir') {
+                            return 'danger';
+                        }
+                        if ($state === 'Siap Dikerjakan') {
+                            return 'success';
+                        }
+                        return 'gray';
+                    }),
             ])
             ->recordActions([
                 Action::make('start')
-                    ->label('Mulai ujian')
-                    ->icon(Heroicon::OutlinedPaperAirplane)
-                    ->color('primary')
+                    ->label(function ($record) {
+                        $now = now();
+                        $finished = \App\Models\ExamResult::where('exam_id', $record->id)
+                            ->where('user_id', auth()->id())
+                            ->exists() || session("exam_finished_{$record->id}_" . auth()->id(), false);
+
+                        if ($finished) {
+                            return 'Lihat Hasil';
+                        }
+
+                        if ($record->started_at && $record->started_at > $now) {
+                            return 'Belum Dimulai';
+                        }
+
+                        // Cek expired
+                        if ($record->exact_time && $record->started_at) {
+                            $endTime = \Carbon\Carbon::parse($record->started_at)->addMinutes((int) $record->duration);
+                            if ($now->greaterThan($endTime)) {
+                                return 'Sudah Berakhir';
+                            }
+                        } elseif ($record->expired_at && $now->greaterThan($record->expired_at)) {
+                            return 'Sudah Berakhir';
+                        }
+
+                        return 'Mulai Ujian';
+                    })
+                    ->icon(function ($record) {
+                        $now = now();
+                        $finished = \App\Models\ExamResult::where('exam_id', $record->id)
+                            ->where('user_id', auth()->id())
+                            ->exists() || session("exam_finished_{$record->id}_" . auth()->id(), false);
+
+                        if ($finished) {
+                            return Heroicon::OutlinedDocumentCheck;
+                        }
+
+                        if ($record->started_at && $record->started_at > $now) {
+                            return Heroicon::OutlinedClock;
+                        }
+
+                        if ($record->exact_time && $record->started_at) {
+                            $endTime = \Carbon\Carbon::parse($record->started_at)->addMinutes((int) $record->duration);
+                            if ($now->greaterThan($endTime)) {
+                                return Heroicon::OutlinedXCircle;
+                            }
+                        } elseif ($record->expired_at && $now->greaterThan($record->expired_at)) {
+                            return Heroicon::OutlinedXCircle;
+                        }
+
+                        return Heroicon::OutlinedPaperAirplane;
+                    })
+                    ->color(function ($record) {
+                        $now = now();
+                        $finished = \App\Models\ExamResult::where('exam_id', $record->id)
+                            ->where('user_id', auth()->id())
+                            ->exists() || session("exam_finished_{$record->id}_" . auth()->id(), false);
+
+                        if ($finished) {
+                            return 'success';
+                        }
+
+                        if ($record->started_at && $record->started_at > $now) {
+                            return 'gray';
+                        }
+
+                        if ($record->exact_time && $record->started_at) {
+                            $endTime = \Carbon\Carbon::parse($record->started_at)->addMinutes((int) $record->duration);
+                            if ($now->greaterThan($endTime)) {
+                                return 'danger';
+                            }
+                        } elseif ($record->expired_at && $now->greaterThan($record->expired_at)) {
+                            return 'danger';
+                        }
+
+                        return 'primary';
+                    })
                     ->button()
-                    ->disabled(fn ($record) =>
-                        $record->started_at >= now()
-                    )
+                    ->disabled(function ($record) {
+                        $now = now();
+                        $finished = \App\Models\ExamResult::where('exam_id', $record->id)
+                            ->where('user_id', auth()->id())
+                            ->exists() || session("exam_finished_{$record->id}_" . auth()->id(), false);
+
+                        if ($finished) {
+                            return false; // Bisa diklik untuk lihat hasil
+                        }
+
+                        if ($record->started_at && $record->started_at > $now) {
+                            return true; // Belum mulai
+                        }
+
+                        // Cek expired
+                        if ($record->exact_time && $record->started_at) {
+                            $endTime = \Carbon\Carbon::parse($record->started_at)->addMinutes((int) $record->duration);
+                            if ($now->greaterThan($endTime)) {
+                                return true; // Sudah lewat
+                            }
+                        } elseif ($record->expired_at && $now->greaterThan($record->expired_at)) {
+                            return true;
+                        }
+
+                        return false;
+                    })
                     ->url(fn ($record) =>
                         route(
                             StartingExam::getRouteName(),

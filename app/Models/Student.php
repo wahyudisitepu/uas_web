@@ -28,4 +28,9 @@ class Student extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function examResults(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ExamResult::class);
+    }
 }

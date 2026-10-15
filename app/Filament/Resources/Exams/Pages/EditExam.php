@@ -20,9 +20,4 @@ class EditExam extends EditRecord
         ];
     }
 
-    #[Override]
-    public function getRelationManagers(): array
-    {
-        return [];
-    }
 }

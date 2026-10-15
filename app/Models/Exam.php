@@ -23,4 +23,9 @@ class Exam extends Model
         return $this->belongsToMany(Subject::class)
             ->withPivot('qty');
     }
+
+    public function results()
+    {
+        return $this->hasMany(ExamResult::class);
+    }
 }

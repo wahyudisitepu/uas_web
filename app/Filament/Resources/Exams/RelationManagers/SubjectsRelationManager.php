@@ -49,31 +49,52 @@ class SubjectsRelationManager extends RelationManager
                     ->width('10px'),
                 TextColumn::make('name')
                     ->label('Pelajaran')
-                    ->searchable(),
+                    ->searchable()
+                    ->weight('bold'),
+                TextColumn::make('active_questions')
+                    ->label('Stok Bank Soal')
+                    ->state(fn ($record) => $record->questions()->where('is_active', true)->count() . ' Soal Aktif')
+                    ->badge()
+                    ->color(fn ($record) => $record->questions()->where('is_active', true)->count() > 0 ? 'success' : 'danger'),
+                TextColumn::make('pivot.qty')
+                    ->label('Jlh. Soal Diambil')
+                    ->badge()
+                    ->color('primary'),
                 IconColumn::make('is_active')
                     ->label('Tersedia')
                     ->boolean(),
-                TextColumn::make('pivot.qty')
-                    ->label('Jlh. Soal'),
             ])
             ->headerActions([
                 AttachAction::make()
                     ->label('Tambah pelajaran')
                     ->preloadRecordSelect()
+                    ->recordTitle(fn ($record) => "{$record->name} (" . $record->questions()->where('is_active', true)->count() . " soal aktif)")
                     ->schema(function (AttachAction $action): array {
                         return [
-                            $action->getRecordSelect(),
+                            $action->getRecordSelect()
+                                ->helperText('Pilih mata pelajaran yang memiliki stok soal aktif.'),
                             TextInput::make('qty')
-                                ->label('Jumlah soal')
+                                ->label('Jumlah soal yang diambil')
+                                ->helperText('Jumlah butir soal yang akan diacak untuk siswa.')
                                 ->required()
                                 ->default(10)
-                                ->numeric(),
+                                ->numeric()
+                                ->minValue(1),
                         ];
                     })
                     ->modalSubmitActionLabel('Tambah')
                     ->attachAnother(false),
             ])
             ->recordActions([
+                EditAction::make()
+                    ->label('Ubah kuota')
+                    ->schema([
+                        TextInput::make('qty')
+                            ->label('Jumlah soal yang diambil')
+                            ->required()
+                            ->numeric()
+                            ->minValue(1),
+                    ]),
                 DetachAction::make()
                     ->label('Singkirkan pelajaran'),
             ])

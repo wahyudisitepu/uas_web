@@ -112,6 +112,12 @@ class SubjectResource extends Resource
                 TextColumn::make('name')
                     ->label('Pelajaran')
                     ->searchable(),
+                TextColumn::make('questions_count')
+                    ->counts('questions')
+                    ->label('Jumlah Soal')
+                    ->badge()
+                    ->color('info')
+                    ->sortable(),
                 IconColumn::make('is_active')
                     ->label('Tersedia')
                     ->boolean(),

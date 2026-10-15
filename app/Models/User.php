@@ -78,4 +78,9 @@ class User extends Authenticatable implements FilamentUser, HasAvatar
     {
         return $this->hasOne(Student::class);
     }
+
+    public function examResults(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ExamResult::class);
+    }
 }

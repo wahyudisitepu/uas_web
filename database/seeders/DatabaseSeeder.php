@@ -11,20 +11,18 @@ class DatabaseSeeder extends Seeder
 {
     use WithoutModelEvents;
 
-    /**
-     * Seed the application's database.
-     */
     public function run(): void
     {
-        // User::factory(10)->create();
-
         User::factory()->create([
-            'name' => 'Khairi Ibnutama',
-            'email' => 'mr.ibnutama@gmail.com',
-            'username' => 'developer',
+            'name' => 'wahyudi',
+            'email' => 'mr@tepu.com',
+            'username' => 'wahyudi2',
             'is_staff' => true,
-            // use Illuminate\Support\Facades\Hash; <-- import di atas
             'password' => Hash::make('rahasia'),
+        ]);
+
+        $this->call([
+            QuestionBankSeeder::class,
         ]);
     }
 }
